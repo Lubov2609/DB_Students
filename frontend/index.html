@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Университет — База данных</title>
+<style>
+body{font-family:Arial;margin:0;padding:20px;background:#f5f5f5}
+h1{text-align:center}
+.tabs{display:flex;gap:10px;justify-content:center;margin-bottom:20px}
+.tab{padding:10px 20px;background:#e0e0e0;border-radius:8px;cursor:pointer}
+.tab.active{background:#4caf50;color:#fff}
+table{width:100%;border-collapse:collapse;background:#fff;margin-bottom:20px}
+th,td{border:1px solid #ccc;padding:8px;text-align:left}
+th{background:#e0e0e0}
+.hidden{display:none}
+button.action-btn{margin-right:5px}
+#modal{display:none;position:fixed;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center}
+#modal .modal-content{background:#fff;padding:20px;border-radius:8px;width:420px;max-width:90%}
+#modal label{display:block;margin-top:10px}
+#modal input,#modal select{width:100%;padding:6px;margin-top:5px;box-sizing:border-box}
+#modal .buttons{text-align:right;margin-top:12px}
+.error{color:red}
+</style>
+</head>
+<body>
+<h1>Информационная система университета</h1>
+
+<div class="tabs">
+  <div class="tab active" data-target="students">Студенты</div>
+  <div class="tab" data-target="lecturers">Преподаватели</div>
+  <div class="tab" data-target="courses">Курсы</div>
+  <div class="tab" data-target="grades">Оценки</div>
+</div>
+
+<div id="student-search" style="margin: 10px 0; display:none;">
+    <input type="text" id="studentSearchInput" placeholder="Поиск по имени или фамилии..." />
+ </div>
+
+<table id="students" class="table-block">
+    <thead><tr><th>ID</th><th>Имя</th><th>Отчество</th><th>Фамилия</th><th>Email</th><th>Телефон</th><th>Дата рождения</th><th>Действия</th></tr></thead>
+    <tbody></tbody>
+</table>
+
+  <table id="lecturers" class="table-block hidden">
+    <thead><tr><th>ID</th><th>Имя</th><th>Фамилия</th><th>Email</th><th>Телефон</th><th>Кафедра</th><th>Принят</th><th>Действия</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <table id="courses" class="table-block hidden">
+    <thead><tr><th>ID</th><th>Название</th><th>Описание</th><th>Кредиты</th><th>Кафедра</th><th>Преподаватель</th><th>Действия</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <table id="grades" class="table-block hidden">
+    <thead><tr><th>ID</th><th>Студент (фамилия)</th><th>Курс</th><th>Семестр</th><th>Итоговая оценка</th><th>Дата добавления</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<!-- Modal -->
+<div id="modal">
+  <div class="modal-content">
+    <h3 id="modal-title">Добавить</h3>
+    <form id="modal-form">
+      <div id="form-fields"></div>
+      <div class="error" id="form-error"></div>
+      <div class="buttons">
+        <button type="button" onclick="closeModal()">Отмена</button>
+        <button type="submit">Сохранить</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+/* ---------- state ---------- */
+const tabs = document.querySelectorAll('.tab');
+const tables = document.querySelectorAll('.table-block');
+let activeTable = 'students';
+let editId = null;
+
+/* helper to get primary key field name for each table */
+function getIdKey(table){
+  switch(table){
+    case 'students': return 'student_id';
+    case 'lecturers': return 'lecturer_id';
+    case 'courses': return 'course_id';
+    case 'grades': return 'grade_id';
+    default: return 'id';
+  }
+}
+
+/* ---------- tabs handling ---------- */
+tabs.forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    tabs.forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    activeTable = tab.dataset.target;
+    tables.forEach(tbl=>tbl.classList.add('hidden'));
+    document.getElementById(activeTable).classList.remove('hidden');
+    loadData(activeTable);
+      // ---- ПОКАЗ ПОИСКА ДЛЯ СТУДЕНТОВ ----
+    const searchBlock = document.getElementById("student-search");
+    if (activeTable === "students") {
+        searchBlock.style.display = "block";
+    } else {
+        searchBlock.style.display = "none";
+    }
+  });
+});
+
+/* ---------- load data ---------- */
+async function loadData(table){
+  try{
+    const res = await fetch(`/api/${table}`);
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    renderTable(table, data);
+  }catch(err){
+    console.error(err);
+    const tbody = document.querySelector(`#${table} tbody`);
+    tbody.innerHTML = `<tr><td colspan="20" class="error">Не удалось загрузить данные</td></tr>`;
+  }
+}
+
+/* ---------- renderers for each table (explicit columns) ---------- */
+function renderTable(table, rows){
+  const tbody = document.querySelector(`#${table} tbody`);
+  tbody.innerHTML = '';
+
+  if(!Array.isArray(rows) || rows.length===0){
+    tbody.innerHTML = `<tr><td colspan="20">Нет данных</td></tr>`;
+    // for students/lecturers/courses allow add button row even if empty
+    if(table !== 'grades') appendAddRow(table, tbody);
+    return;
+  }
+
+  if(table==='students'){
+    rows.forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.student_id}</td>
+        <td>${r.first_name || ''}</td>
+        <td>${r.pytronimic || ''}</td>
+        <td>${r.last_name || ''}</td>
+        <td>${r.email || ''}</td>
+        <td>${r.phone_number || ''}</td>
+        <td>${r.birth_date || ''}</td>
+        <td>
+          <button class="action-btn" onclick="openModal('students', ${r.student_id})">✏️</button>
+          <button class="action-btn" onclick="deleteRow('students', ${r.student_id})">🗑️</button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+    appendAddRow(table, tbody);
+    return;
+  }
+
+  if(table==='lecturers'){
+    rows.forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.lecturer_id}</td>
+        <td>${r.first_name || ''}</td>
+        <td>${r.last_name || ''}</td>
+        <td>${r.email || ''}</td>
+        <td>${r.phone_number || ''}</td>
+        <td>${r.department || ''}</td>
+        <td>${r.hire_date || ''}</td>
+        <td>
+          <button class="action-btn" onclick="openModal('lecturers', ${r.lecturer_id})">✏️</button>
+          <button class="action-btn" onclick="deleteRow('lecturers', ${r.lecturer_id})">🗑️</button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+    appendAddRow(table, tbody);
+    return;
+  }
+
+  if(table==='courses'){
+    rows.forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.course_id}</td>
+        <td>${r.title || ''}</td>
+        <td>${r.description || ''}</td>
+        <td>${r.credits || ''}</td>
+        <td>${r.department || ''}</td>
+        <td>${r.lecturer_last_name || (r.lecturer_id || '')}</td>
+        <td>
+          <button class="action-btn" onclick="openModal('courses', ${r.course_id})">✏️</button>
+          <button class="action-btn" onclick="deleteRow('courses', ${r.course_id})">🗑️</button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+    appendAddRow(table, tbody);
+    return;
+  }
+
+  if(table==='grades'){
+    rows.forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.grade_id}</td>
+        <td>${r.student_last_name || ''}</td>
+        <td>${r.course_title || ''}</td>
+        <td>${r.semester || ''}</td>
+        <td>${r.final_grade || ''}</td>
+        <td>${r.created_at || ''}</td>`;
+      tbody.appendChild(tr);
+    });
+    // no add/edit/delete row appended here? We might allow add — keep add option:
+    appendAddRow(table, tbody, true); // allow add for grades but no edit/delete in rows
+    return;
+  }
+}
+
+/* add-row: creates a full-width row with "Add" button; if forGradesAddOnlyOnly flag */
+function appendAddRow(table, tbody, gradesAddOnly=false){
+  const tr = document.createElement('tr');
+  const colCount = tbody.parentElement.querySelector('thead tr').children.length;
+  const td = document.createElement('td');
+  td.colSpan = colCount;
+  if(table==='grades') {
+    td.innerHTML = `<button onclick="openModal('grades')">Добавить оценку</button>`;
+  } else {
+    td.innerHTML = `<button onclick="openModal('${table}')">Добавить запись</button>`;
+  }
+  tr.appendChild(td);
+  tbody.appendChild(tr);
+}
+
+/* ---------- CRUD actions ---------- */
+async function deleteRow(table, id){
+  if(!confirm(`Удалить запись ID=${id} из ${table}?`)) return;
+  try{
+    const res = await fetch(`/api/${table}/${id}`, { method:'DELETE' });
+    if(!res.ok) throw new Error('Delete error');
+    await loadData(table);
+  }catch(err){ alert('Ошибка удаления'); console.error(err); }
+}
+
+/* ---------- Modal logic ---------- */
+const modal = document.getElementById('modal');
+const modalForm = document.getElementById('modal-form');
+const formFields = document.getElementById('form-fields');
+const modalTitle = document.getElementById('modal-title');
+const formError = document.getElementById('form-error');
+
+function openModal(table, id=null){
+  editId = id;
+  modalTitle.textContent = id ? `Редактировать ${table}` : `Добавить в ${table}`;
+  formError.textContent = '';
+  formFields.innerHTML = '';
+
+  // build fields depending on table; if editId set, fetch item to prefill
+  if(editId){
+    // fetch existing record to prefill
+    fetch(`/api/${table}/${editId}`).then(r=>r.json()).then(item=>{
+      buildFields(table, item);
+      modal.style.display = 'flex';
+    }).catch(err=>{
+      console.error(err);
+      alert('Не удалось загрузить данные для редактирования');
+    });
+  } else {
+    buildFields(table, null).then(()=> modal.style.display = 'flex');
+  }
+}
+
+function closeModal(){ modal.style.display = 'none'; editId = null; modalForm.reset(); }
+
+window.onclick = (e)=>{ if(e.target===modal) closeModal(); }
+
+async function buildFields(table, item){
+  // returns a Promise because we may fetch lists for selects
+  formFields.innerHTML = '';
+  if(table==='students'){
+    formFields.innerHTML += `<label>Имя:<input name="first_name" value="${item?.first_name || ''}" required></label>`;
+    formFields.innerHTML += `<label>Отчество:<input name="middle_name" value="${item?.middle_name || ''}"></label>`;
+    formFields.innerHTML += `<label>Фамилия:<input name="last_name" value="${item?.last_name || ''}" required></label>`;
+    formFields.innerHTML += `<label>Email:<input name="email" type="email" value="${item?.email || ''}"></label>`;
+    formFields.innerHTML += `<label>Телефон:<input name="phone_number" value="${item?.phone_number || ''}"></label>`;
+    formFields.innerHTML += `<label>Дата рождения:<input name="birth_date" placeholder="YYYY-MM-DD" value="${item?.birth_date || ''}"></label>`;
+    return Promise.resolve();
+  }
+
+  if(table==='lecturers'){
+    formFields.innerHTML += `<label>Имя:<input name="first_name" value="${item?.first_name || ''}" required></label>`;
+    formFields.innerHTML += `<label>Фамилия:<input name="last_name" value="${item?.last_name || ''}" required></label>`;
+    formFields.innerHTML += `<label>Email:<input name="email" type="email" value="${item?.email || ''}"></label>`;
+    formFields.innerHTML += `<label>Телефон:<input name="phone_number" value="${item?.phone_number || ''}"></label>`;
+    formFields.innerHTML += `<label>Кафедра:<input name="department" value="${item?.department || ''}"></label>`;
+    formFields.innerHTML += `<label>Дата приема:<input name="hire_date" placeholder="YYYY-MM-DD" value="${item?.hire_date || ''}"></label>`;
+    return Promise.resolve();
+  }
+
+  if(table==='courses'){
+    // need lecturers list for select
+    const lecturers = await fetch('/api/lecturers').then(r=>r.json());
+    let options = `<option value="">-- Выберите --</option>`;
+    lecturers.forEach(l => {
+      const selected = item && (l.lecturer_id === item.lecturer_id) ? 'selected' : '';
+      options += `<option value="${l.lecturer_id}" ${selected}>${l.last_name} (${l.first_name})</option>`;
+    });
+    formFields.innerHTML += `<label>Название:<input name="title" value="${item?.title || ''}" required></label>`;
+    formFields.innerHTML += `<label>Описание:<input name="description" value="${item?.description || ''}"></label>`;
+    formFields.innerHTML += `<label>Кредиты:<input name="credits" type="number" value="${item?.credits || ''}"></label>`;
+    formFields.innerHTML += `<label>Кафедра:<input name="department" value="${item?.department || ''}"></label>`;
+    formFields.innerHTML += `<label>Преподаватель:<select name="lecturer_id">${options}</select></label>`;
+    return;
+  }
+
+  // ---------------- ФОРМА ДЛЯ ДОБАВЛЕНИЯ И РЕДАКТИРОВАНИЯ ОЦЕНОК ----------------
+if (table === 'grades') {
+
+    // Загружаем данные из всех 3 таблиц / представлений
+    const [students, courses, semesters] = await Promise.all([
+        fetch('/api/students').then(r => r.json()),
+        fetch('/api/courses').then(r => r.json()),
+        fetch('/api/semesters').then(r => r.json())
+    ]);
+
+    // ---------- СПИСОК СТУДЕНТОВ ----------
+    let studOptions = `<option value="">-- Выберите студента --</option>`;
+    students.forEach(s => {
+        const text = `${s.last_name} ${s.first_name}${s.pytronimic ? " " + s.pytronimic : ""}`;
+        studOptions += `<option value="${s.student_id}">${text}</option>`;
+    });
+
+    // ---------- СПИСОК КУРСОВ ----------
+    let courseOptions = `<option value="">-- Выберите курс --</option>`;
+    courses.forEach(c => {
+        courseOptions += `<option value="${c.course_id}">${c.title}</option>`;
+    });
+
+    // ---------- СПИСОК СЕМЕСТРОВ (из VIEW) ----------
+    let semOptions = `<option value="">-- Выберите семестр --</option>`;
+    semesters.forEach(se => {
+        semOptions += `<option value="${se.semester_id}">${se.name}</option>`;
+    });
+
+    // ---------- СБОРКА ФОРМЫ ----------
+    formFields.innerHTML = `
+        <label>
+            Студент:
+            <select name="student_id" required>
+                ${studOptions}
+            </select>
+        </label>
+
+        <label>
+            Курс:
+            <select name="course_id" required>
+                ${courseOptions}
+            </select>
+        </label>
+
+        <label>
+            Семестр:
+            <select name="name" required>
+                ${semOptions}
+            </select>
+        </label>
+
+        <label>
+            Итоговая оценка:
+            <input type="number" name="final_grade" step="0.1" required>
+        </label>
+    `;
+
+    return;
+}
+
+  return Promise.resolve();
+}
+
+/* ---------- submit modal ---------- */
+modalForm.onsubmit = async (e)=>{
+  e.preventDefault();
+  formError.textContent = '';
+  const obj = Object.fromEntries(new FormData(modalForm).entries());
+
+  // convert numeric fields
+  if(activeTable==='courses' && obj.credits) obj.credits = Number(obj.credits);
+  if(activeTable==='courses' && obj.lecturer_id==='') obj.lecturer_id = null;
+  if(activeTable==='grades'){
+    obj.student_id = Number(obj.student_id);
+    obj.course_id = Number(obj.course_id);
+    obj.final_grade = Number(obj.final_grade);
+  }
+
+  try{
+    if(editId){
+      const res = await fetch(`/api/${activeTable}/${editId}`, {
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(obj)
+      });
+      if(!res.ok) throw new Error('Save error');
+    } else {
+      const res = await fetch(`/api/${activeTable}`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(obj)
+      });
+      if(!res.ok) throw new Error('Create error');
+    }
+    closeModal();
+    await loadData(activeTable);
+  }catch(err){
+    console.error(err);
+    formError.textContent = 'Ошибка сохранения. Проверьте данные.';
+  }
+};
+
+/* ---------- init ---------- */
+loadData(activeTable);
+
+// ---- ПОКАЗ ПОИСКА ДЛЯ СТУДЕНТОВ ----
+const searchBlock = document.getElementById("student-search");
+if (activeTable === "students") {
+    searchBlock.style.display = "block";
+} else {
+    searchBlock.style.display = "none";
+}
+
+document.getElementById("studentSearchInput")
+    .addEventListener("input", filterStudentsTable);
+
+function filterStudentsTable() {
+    const text = document.getElementById("studentSearchInput").value.toLowerCase();
+    const rows = document.querySelectorAll("#students tbody tr");
+
+    rows.forEach(row => {
+        const rowText = row.innerText.toLowerCase();
+        row.style.display = rowText.includes(text) ? "" : "none";
+    });
+}
+
+
+
+</script>
+</body>
+</html>
