@@ -203,17 +203,6 @@ async function loadGrades() {
     });
 }
 
-// ---------------- ПОИСК СТУДЕНТОВ -----------------
 
-document.getElementById("studentSearchInput")
-        .addEventListener("input", filterStudentsTable);
 
-function filterStudentsTable() {
-    const value = document.getElementById("studentSearchInput").value.toLowerCase();
-    const rows = document.querySelectorAll("#students tbody tr");
 
-    rows.forEach(row => {
-        const text = row.innerText.toLowerCase();
-        row.style.display = text.includes(value) ? "" : "none";
-    });
-}
