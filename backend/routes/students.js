@@ -21,9 +21,9 @@ res.json(r.rows[0]);
 router.post('/', async (req, res) => {
 const { first_name, last_name, email, phone_number, birth_date } = req.body;
 const r = await db.query(
-`INSERT INTO students(first_name, last_name,pytronimic, email, phone_number, birth_date)
-VALUES($1,$2,$3,$4,$5) RETURNING *`,
-[first_name, last_name, email, phone_number, birth_date]
+`INSERT INTO students(first_name, last_name, pytronimic, email, phone_number, birth_date)
+ VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,
+[first_name, last_name, pytronimic, email, phone_number, birth_date]
 );
 res.json(r.rows[0]);
 });
@@ -31,11 +31,13 @@ res.json(r.rows[0]);
 
 // UPDATE
 router.put('/:id', async (req, res) => {
-const { first_name, last_name, email, phone_number, birth_date } = req.body;
+const { first_name, last_name, pytronimic, email, phone_number, birth_date } = req.body;
 const r = await db.query(
-`UPDATE students SET first_name=$1,last_name=$2,pytronimic= $3, email=$4,phone_number=$5,birth_date=$6
-WHERE student_id=$6 RETURNING *`,
-[first_name, last_name, email, phone_number, birth_date, req.params.id]
+  `UPDATE students 
+   SET first_name=$1, last_name=$2, pytronimic=$3, email=$4, phone_number=$5, birth_date=$6
+   WHERE student_id=$7
+   RETURNING *`,
+   [first_name, last_name, pytronimic, email, phone_number, birth_date, req.params.id]
 );
 res.json(r.rows[0]);
 });

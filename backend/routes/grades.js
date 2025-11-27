@@ -2,7 +2,34 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 
-// GET ALL with student last name and course title and created_at
+// --- 1. GET: оценки конкретного студента (должно идти ПЕРВЫМ!) ---
+router.get('/student/:id', async (req, res) => {
+  try {
+    const studentId = req.params.id;
+    const q = `
+      SELECT
+        g.grade_id,
+        g.student_id,
+        g.course_id,
+        c.title AS course_title,
+        g.semester,
+        g.final_grade,
+        g.created_at
+      FROM grades g
+      LEFT JOIN courses c ON g.course_id = c.course_id
+      WHERE g.student_id = $1
+      ORDER BY g.created_at DESC
+    `;
+    const r = await db.query(q, [studentId]);
+    res.json(r.rows);
+  } catch (err) {
+    console.error('GET /grades/student/:id error', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
+// --- 2. GET: Все оценки ---
 router.get('/', async (_, res) => {
     const r = await db.query(
         `SELECT g.grade_id, g.student_id, s.last_name AS student_last_name,
@@ -15,7 +42,7 @@ router.get('/', async (_, res) => {
     res.json(r.rows);
 });
 
-// GET by id (with joins)
+// --- 3. GET: Оценка по ID ---
 router.get('/:id', async (req, res) => {
     const r = await db.query(
         `SELECT g.grade_id, g.student_id, s.last_name AS student_last_name,
@@ -29,7 +56,7 @@ router.get('/:id', async (req, res) => {
     res.json(r.rows[0]);
 });
 
-// CREATE (still expects student_id, course_id, semester, final_grade)
+// CREATE
 router.post('/', async (req, res) => {
     const { student_id, course_id, semester, final_grade } = req.body;
     const r = await db.query(
@@ -39,8 +66,5 @@ router.post('/', async (req, res) => {
     );
     res.json(r.rows[0]);
 });
-
-// NOTE: we intentionally keep no PUT/DELETE for grades as per requirement (or you can keep them)
-// If you want to keep PUT/DELETE, uncomment and implement.
 
 module.exports = router;

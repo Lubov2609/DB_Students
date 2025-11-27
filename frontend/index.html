@@ -31,6 +31,9 @@ button.action-btn{margin-right:5px}
   <div class="tab" data-target="lecturers">Преподаватели</div>
   <div class="tab" data-target="courses">Курсы</div>
   <div class="tab" data-target="grades">Оценки</div>
+  <div class="tab" data-target="student-panel">Студент</div>
+
+
 </div>
 
 <div id="student-search" style="margin: 10px 0; display:none;">
@@ -44,23 +47,23 @@ button.action-btn{margin-right:5px}
 <div id="lecturer-search" class="hidden" style="margin: 12px 0; display:flex; flex-direction: column; gap:10px;">
     
     <!-- Алфавитный фильтр -->
-    <div id="letter-filter" style="display:flex; flex-wrap:wrap; gap:5px;"></div>
+    <!-- <div id="letter-filter" style="display:flex; flex-wrap:wrap; gap:5px;"></div> -->
 
     <!-- Фильтр по дате -->
-<div id="lecturer-search" style="display:flex; gap:10px;">
+<!-- <div id="lecturer-search" style="display:flex; gap:10px;">
         <button onclick="sortLecturersByDate('asc')">📅 Сначала старые</button>
         <button onclick="sortLecturersByDate('desc')">📅 Сначала новые</button>
- </div>
+ </div> -->
     <!-- Поиск по кафедре -->
-    <input type="text" id="departmentSearchInput" placeholder="Поиск по кафедре..." />
-</div>
+    <!-- <input type="text" id="departmentSearchInput" placeholder="Поиск по кафедре..." />
+</div> -->
   <table id="lecturers" class="table-block hidden">
     <thead><tr><th>ID</th><th>Имя</th><th>Фамилия</th><th>Email</th><th>Телефон</th><th>Кафедра</th><th>Принят</th><th>Действия</th></tr></thead>
     <tbody></tbody>
   </table>
 
   <table id="courses" class="table-block hidden">
-    <thead><tr><th>ID</th><th>Название</th><th>Описание</th><th>Кредиты</th><th>Кафедра</th><th>Преподаватель</th><th>Действия</th></tr></thead>
+    <thead><tr><th>ID</th><th>Название</th><th>Описание</th><th>Зачётные единицы</th><th>Дисциплины</th><th>Преподаватель</th><th>Действия</th></tr></thead>
     <tbody></tbody>
   </table>
 
@@ -69,6 +72,45 @@ button.action-btn{margin-right:5px}
     <tbody></tbody>
   </table>
 </div>
+
+<!-- ---------------- ВКЛАДКА "СТУДЕНТ" ---------------- -->
+<!-- 
+ <select id="student-select">
+<button id="showStudentStatsBtn">Показать успеваемость</button>
+<div id="student-stats"></div>
+<button id="downloadStatsBtn">Скачать CSV</button>
+<canvas id="studentChart"></canvas>
+<div id="student-panel" class="table-block hidden" style="padding:20px;">  -->
+<!-- ---------------- ВКЛАДКА "СТУДЕНТ" ---------------- -->
+
+<!-- =================== ВКЛАДКА СТУДЕНТ =================== -->
+
+<div id="student-panel" class="hidden" style="padding:20px;">
+    <h2>Успеваемость студента</h2>
+
+    <label>Выберите студента:</label><br>
+    <select id="stat-student-select" style="padding:5px; width:300px; margin:10px 0;">
+        <option value="">-- Студент не выбран --</option>
+    </select>
+
+    <div id="course-block" class="hidden">
+        <label>Выберите предмет, по которому нет оценки:</label><br>
+        <select id="stat-course-select" style="padding:5px; width:300px; margin:10px 0;">
+            <option value="">-- Выберите предмет --</option>
+        </select>
+
+        <button id="makePredictionBtn"
+                style="padding:6px 12px; background:#673ab7; color:white;">
+            Сделать прогноз
+        </button>
+    </div>
+
+    <div id="prediction-result" style="margin-top:20px; font-size:18px;"></div>
+
+    <canvas id="studentChart" width="800" height="400" style="margin-top:30px;"></canvas>
+</div>
+
+
 
 <!-- Modal -->
 <div id="modal">
@@ -84,6 +126,7 @@ button.action-btn{margin-right:5px}
     </form>
   </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
 /* ---------- state ---------- */
@@ -99,6 +142,9 @@ function getIdKey(table){
     case 'lecturers': return 'lecturer_id';
     case 'courses': return 'course_id';
     case 'grades': return 'grade_id';
+    case "student-panel":      // ← ДОБАВИТЬ
+        loadStudentList();     // ← загрузка списка студентов
+        break;
     default: return 'id';
   }
 }
@@ -222,7 +268,7 @@ function renderTable(table, rows){
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${r.grade_id}</td>
-        <td>${r.student_last_name || ''}</td>
+        <td>${r.student_last_name ||   ''} ${r.student_first_name || ''} ${r.student_pytronimic || ''}</td>
         <td>${r.course_title || ''}</td>
         <td>${r.semester || ''}</td>
         <td>${r.final_grade || ''}</td>
@@ -436,6 +482,11 @@ modalForm.onsubmit = async (e)=>{
 
 /* ---------- init ---------- */
 loadData(activeTable);
+loadStudentList();// ← загрузка студентов для вкладки "Студент"
+
+
+// loadStudentStats(); 
+
 
 // ---- ПОКАЗ ПОИСКА ДЛЯ СТУДЕНТОВ ----
 const searchBlock = document.getElementById("student-search");
@@ -459,37 +510,37 @@ function filterStudentsTable() {
 }
 
 
-/* ---------------- АЛФАВИТНЫЙ ФИЛЬТР ---------------- */
+// /* ---------------- АЛФАВИТНЫЙ ФИЛЬТР ---------------- */
 
-const letters = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЭЮЯ".split("");
+// const letters = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЭЮЯ".split("");
 
-function createLetterButtons() {
-    const wrap = document.getElementById("letter-filter");
-    wrap.innerHTML = "";
-    letters.forEach(l => {
-        const btn = document.createElement("button");
-        btn.textContent = l;
-        btn.onclick = () => filterLecturersByLetter(l);
-        wrap.appendChild(btn);
-    });
+// function createLetterButtons() {
+//     const wrap = document.getElementById("letter-filter");
+//     wrap.innerHTML = "";
+//     letters.forEach(l => {
+//         const btn = document.createElement("button");
+//         btn.textContent = l;
+//         btn.onclick = () => filterLecturersByLetter(l);
+//         wrap.appendChild(btn);
+//     });
 
-    // кнопка "Сброс"
-    const reset = document.createElement("button");
-    reset.textContent = "Сброс";
-    reset.style.marginLeft = "10px";
-    reset.onclick = () => loadData("lecturers");
-    wrap.appendChild(reset);
-}
+//     // кнопка "Сброс"
+//     const reset = document.createElement("button");
+//     reset.textContent = "Сброс";
+//     reset.style.marginLeft = "10px";
+//     reset.onclick = () => loadData("lecturers");
+//     wrap.appendChild(reset);
+// }
 
-createLetterButtons();
+// createLetterButtons();
 
-function filterLecturersByLetter(letter) {
-    const rows = document.querySelectorAll("#lecturers tbody tr");
-    rows.forEach(row => {
-        const lastName = row.children[2].innerText.trim().toUpperCase(); // Фамилия = 3-й столбец
-        row.style.display = lastName.startsWith(letter) ? "" : "none";
-    });
-}
+// function filterLecturersByLetter(letter) {
+//     const rows = document.querySelectorAll("#lecturers tbody tr");
+//     rows.forEach(row => {
+//         const lastName = row.children[2].innerText.trim().toUpperCase(); // Фамилия = 3-й столбец
+//         row.style.display = lastName.startsWith(letter) ? "" : "none";
+//     });
+// }
 
 /* ---------------- ФИЛЬТР ПО ДАТЕ ---------------- */
 function normalizeDate(dateStr) {
@@ -516,18 +567,452 @@ function normalizeDate(dateStr) {
     return dateStr;
 }
 
-/* ---------------- ПОИСК ПО КАФЕДРЕ ---------------- */
+// /* ---------------- ПОИСК ПО КАФЕДРЕ ---------------- */
 
-document.getElementById("departmentSearchInput")
-    .addEventListener("input", function () {
-        const val = this.value.toLowerCase();
-        const rows = document.querySelectorAll("#lecturers tbody tr");
+// document.getElementById("departmentSearchInput")
+//     .addEventListener("input", function () {
+//         const val = this.value.toLowerCase();
+//         const rows = document.querySelectorAll("#lecturers tbody tr");
 
-        rows.forEach(r => {
-            const dept = r.children[5].innerText.toLowerCase(); // кафедра = 6-й столбец
-            r.style.display = dept.includes(val) ? "" : "none";
-        });
+//         rows.forEach(r => {
+//             const dept = r.children[5].innerText.toLowerCase(); // кафедра = 6-й столбец
+//             r.style.display = dept.includes(val) ? "" : "none";
+//         });
+//     });
+
+
+
+/* ------------------- ЗАГРУЗКА СПИСКА СТУДЕНТОВ ------------------- */
+async function loadStudentList() {
+    const sel = document.getElementById("student-select");
+    sel.innerHTML = `<option value="">Загрузка...</option>`;
+
+    const res = await fetch("/api/students");
+    const students = await res.json();
+
+    sel.innerHTML = `<option value="">-- Выберите студента --</option>`;
+    students.forEach(s => {
+        sel.innerHTML += `<option value="${s.student_id}">
+            ${s.last_name} ${s.first_name}
+        </option>`;
     });
+}
+
+/* ------------------- ЗАГРУЗКА УСПЕВАЕМОСТИ ------------------- */
+async function loadStudentStats() {
+    const studentId = document.getElementById("student-select").value;
+    const output = document.getElementById("student-stats");
+
+    if (!studentId) {
+        output.innerHTML = "<p style='color:red;'>Выберите студента!</p>";
+        return;
+    }
+
+    output.innerHTML = "<p>Загрузка...</p>";
+
+    try {
+        const res = await fetch(`/api/student-stats/${studentId}`);
+        if (!res.ok) throw new Error("Ошибка ответа сервера");
+
+        const data = await res.json();
+        output.innerHTML = "";
+
+        if (data.length === 0) {
+            output.innerHTML = "<p>У студента нет данных по успеваемости.</p>";
+            return;
+        }
+
+        // ---------- Таблица успеваемости ----------
+        let html = `
+            <h3>Успеваемость студента</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Курс</th>
+                        <th>Семестр</th>
+                        <th>Оценка</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        data.forEach(rec => {
+            html += `
+                <tr>
+                    <td>${rec.course_title}</td>
+                    <td>${rec.semester}</td>
+                    <td>${rec.final_grade}</td>
+                </tr>
+            `;
+        });
+
+        html += "</tbody></table>";
+        output.innerHTML = html;
+
+        // ---------- ГРАФИК ----------
+        drawStudentChart(data);
+
+    } catch (err) {
+        output.innerHTML = "<p style='color:red;'>Ошибка загрузки данных.</p>";
+        console.error(err);
+    }
+}
+
+/* ------------------- ГРАФИК ------------------- */
+let studentChart = null;
+
+function drawStudentChart(data) {
+    const ctx = document.getElementById("studentChart").getContext("2d");
+
+    if (studentChart) studentChart.destroy();
+
+    studentChart = new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: data.map(d => d.course_title),
+            datasets: [{
+                label: "Итоговая оценка",
+                data: data.map(d => d.final_grade),
+                borderWidth: 3,
+                borderColor: "#4caf50",
+                tension: 0.3
+            }]
+        },
+        options: {
+            scales: {
+                y: { beginAtZero: false }
+            }
+        }
+    });
+}
+
+
+
+
+// ----------------- фронтенд: student stats -----------------
+
+// Загрузить список студентов в селект (вызывается при загрузке вкладки)
+async function populateStudentSelect() {
+  const sel = document.getElementById('student-select');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Загрузка...</option>';
+  try {
+    const res = await fetch('/api/students');
+    if (!res.ok) throw new Error('students fetch ' + res.status);
+    const students = await res.json();
+    sel.innerHTML = '<option value="">-- Выберите студента --</option>';
+    students.forEach(s => {
+      const name = `${s.last_name || ''} ${s.first_name || ''}`.trim();
+      const opt = document.createElement('option');
+      opt.value = s.student_id;
+      opt.textContent = `${name} (ID:${s.student_id})`;
+      sel.appendChild(opt);
+    });
+  } catch (err) {
+    console.error('populateStudentSelect error', err);
+    sel.innerHTML = '<option value="">Ошибка загрузки</option>';
+  }
+}
+
+// Показать успеваемость по выбранному студенту
+async function loadStudentStats() {
+  const sel = document.getElementById('student-select');
+  const out = document.getElementById('student-stats');
+  const canvas = document.getElementById('studentChart');
+  if (!sel || !out || !canvas) { console.error('DOM elements missing'); return; }
+
+  const sid = sel.value;
+  if (!sid) { out.innerHTML = '<p style="color:crimson">Выберите студента.</p>'; clearCanvas(canvas); return; }
+
+  out.innerHTML = '<p>Загрузка...</p>'; clearCanvas(canvas);
+
+  try {
+    // Запрасываем backend маршрут, который мы добавили
+    const res = await fetch(`/api/grades/student/${sid}`);
+    if (!res.ok) throw new Error('student-stats fetch ' + res.status);
+    const grades = await res.json();
+
+    if (!grades || grades.length === 0) {
+      out.innerHTML = '<p>Оценок не найдено.</p>';
+      document.getElementById('downloadStatsBtn').style.display = 'none';
+      return;
+    }
+
+    // Рендер таблицы
+    let html = '<h3>Успеваемость</h3><table><thead><tr><th>Курс</th><th>Семестр</th><th>Оценка</th><th>Дата</th></tr></thead><tbody>';
+    grades.forEach(g => {
+      html += `<tr>
+                <td>${escapeHtml(g.course_title || ('Курс ' + (g.course_id||'')))}</td>
+                <td>${escapeHtml(g.semester || '')}</td>
+                <td>${escapeHtml(g.final_grade == null ? '' : g.final_grade)}</td>
+                <td>${escapeHtml(g.created_at ? new Date(g.created_at).toLocaleString() : '')}</td>
+               </tr>`;
+    });
+    html += '</tbody></table>';
+    out.innerHTML = html;
+
+    // Сохраним данные для скачивания и графика
+    window._currentStudentStats = { studentId: sid, grades };
+
+    // Построить график: усредним оценки по курсам (если несколько записей по курсу)
+    const byCourse = {};
+    grades.forEach(g => {
+      const course = g.course_title || ('Курс ' + (g.course_id || ''));
+      const val = Number(g.final_grade);
+      if (!byCourse[course]) byCourse[course] = { sum: 0, cnt: 0 };
+      if (!isNaN(val)) { byCourse[course].sum += val; byCourse[course].cnt += 1; }
+    });
+    const labels = [], values = [];
+    Object.keys(byCourse).forEach(course => {
+      const o = byCourse[course];
+      labels.push(course);
+      values.push(o.cnt ? +(o.sum / o.cnt).toFixed(2) : 0);
+    });
+
+    drawBarChart(canvas, labels, values);
+    document.getElementById('downloadStatsBtn').style.display = 'inline-block';
+  } catch (err) {
+    console.error('loadStudentStats error', err);
+    out.innerHTML = '<p style="color:crimson">Ошибка загрузки данных.</p>';
+    document.getElementById('downloadStatsBtn').style.display = 'none';
+  }
+}
+
+// Скачать CSV (текущие grades в window._currentStudentStats)
+function downloadStudentCSV() {
+  const data = window._currentStudentStats;
+  if (!data || !data.grades) { alert('Нет данных для скачивания'); return; }
+  let csv = 'Курс;Семестр;Оценка;Дата\n';
+  data.grades.forEach(g => {
+    const course = (g.course_title || '').replace(/;/g,',');
+    const sem = (g.semester || '').replace(/;/g,',');
+    const date = g.created_at ? (new Date(g.created_at)).toISOString() : '';
+    csv += `${course};${sem};${g.final_grade};${date}\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `uspev_${data.studentId}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// Utility
+function escapeHtml(s){ return String(s===null||s===undefined?'':s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function clearCanvas(canvas){
+  try{ const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); }catch(e){}
+}
+
+// Простая диаграмма на canvas (bar chart)
+function drawBarChart(canvas, labels, values){
+  const ctx = canvas.getContext('2d');
+  // responsive
+  const ratio = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.round(rect.width * ratio);
+  canvas.height = Math.round((rect.height || 260) * ratio);
+  ctx.setTransform(1,0,0,1,0,0); // reset transform
+  ctx.scale(ratio, ratio);
+  ctx.clearRect(0,0,rect.width,rect.height);
+
+  if (!labels || labels.length === 0) {
+    ctx.fillStyle = '#666'; ctx.fillText('Нет данных для графика', 10, 20); return;
+  }
+
+  const padding = 40;
+  const chartW = rect.width - padding*2;
+  const chartH = rect.height - padding*2;
+  const maxVal = Math.max(...values, 1);
+  const n = values.length;
+  const colFull = chartW / n;
+  const barW = colFull * 0.6;
+  const gap = colFull * 0.4;
+
+  // axes
+  ctx.strokeStyle = '#333';
+  ctx.beginPath();
+  ctx.moveTo(padding, padding);
+  ctx.lineTo(padding, padding + chartH);
+  ctx.lineTo(padding + chartW, padding + chartH);
+  ctx.stroke();
+
+  ctx.font = '12px Arial';
+  for (let i=0;i<n;i++){
+    const v = values[i];
+    const x = padding + i*(barW+gap) + gap/2;
+    const h = (v / maxVal) * (chartH - 10);
+    const y = padding + chartH - h;
+    ctx.fillStyle = '#4caf50';
+    ctx.fillRect(x, y, barW, h);
+    ctx.fillStyle = '#000';
+    ctx.fillText(String(v), x, y - 6);
+    // label
+    ctx.save();
+    ctx.translate(x + barW/2, padding + chartH + 14);
+    ctx.rotate(-Math.PI/6);
+    ctx.textAlign = 'right';
+    ctx.fillText(labels[i], 0, 0);
+    ctx.restore();
+  }
+}
+
+
+/* ==========================================================
+   ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК
+========================================================== */
+document.querySelectorAll(".tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+
+        document.querySelectorAll(".table-block, #student-panel")
+            .forEach(b => b.classList.add("hidden"));
+
+        const target = tab.dataset.target;
+        const block = document.getElementById(target);
+        if (block) block.classList.remove("hidden");
+
+        if (target === "student-panel") loadStudentList();
+    });
+});
+
+
+/* ==========================================================
+   1. ЗАГРУЗКА СПИСКА СТУДЕНТОВ
+========================================================== */
+async function loadStudentList() {
+    const sel = document.getElementById("stat-student-select");
+    sel.innerHTML = `<option value="">Загрузка...</option>`;
+    document.getElementById("course-block").classList.add("hidden");
+    document.getElementById("prediction-result").innerHTML = "";
+
+    const res = await fetch("/api/students");
+    const students = await res.json();
+
+    sel.innerHTML = `<option value="">-- Выберите студента --</option>`;
+    students.forEach(s => {
+        sel.innerHTML += `<option value="${s.student_id}">
+            ${s.last_name} ${s.first_name}
+        </option>`;
+    });
+
+    sel.onchange = onStudentSelected;
+}
+
+
+/* ==========================================================
+   2. ПОСЛЕ ВЫБОРА СТУДЕНТА → ПОДГРУЖАЕМ КУРСЫ БЕЗ ОЦЕНОК
+========================================================== */
+async function onStudentSelected() {
+    const id = this.value;
+    const courseSel = document.getElementById("stat-course-select");
+    const block = document.getElementById("course-block");
+    const resultBox = document.getElementById("prediction-result");
+
+    courseSel.innerHTML = "<option>Загрузка...</option>";
+    resultBox.innerHTML = "";
+    block.classList.add("hidden");
+
+    if (!id) return;
+
+    // данные курсов
+    const allCourses = await (await fetch("/api/courses")).json();
+
+    // получаем оценки студента
+    const grades = await (await fetch(`/api/grades/student/${id}`)).json();
+
+    const learnedIds = new Set(grades.map(g => Number(g.course_id)));
+
+    const available = allCourses.filter(c => !learnedIds.has(Number(c.course_id)));
+
+    courseSel.innerHTML = `<option value="">-- Выберите предмет --</option>`;
+    available.forEach(c => {
+        courseSel.innerHTML += `<option value="${c.course_id}">${c.title}</option>`;
+    });
+
+    block.classList.remove("hidden");
+}
+
+
+/* ==========================================================
+   3. ПРОГНОЗ
+========================================================== */
+
+document.getElementById("makePredictionBtn").onclick = makePrediction;
+
+async function makePrediction() {
+    const studentId = document.getElementById("stat-student-select").value;
+    const courseId = document.getElementById("stat-course-select").value;
+    const resultBox = document.getElementById("prediction-result");
+
+    if (!studentId) {
+        resultBox.textContent = "Выберите студента.";
+        return;
+    }
+    if (!courseId) {
+        resultBox.textContent = "Выберите предмет.";
+        return;
+    }
+
+    resultBox.textContent = "Расчёт...";
+
+    // оценки студента
+    const grades = await (await fetch(`/api/grades/student/${studentId}`)).json();
+    const numeric = grades.map(g => Number(g.final_grade)).filter(v => !isNaN(v));
+
+    if (numeric.length === 0) {
+        resultBox.textContent = "Недостаточно данных для прогноза.";
+        return;
+    }
+
+    const avg = numeric.reduce((a,b)=>a+b,0) / numeric.length;
+
+    // простой тренд (разностная)
+    let trend = 0;
+    for (let i=1;i<numeric.length;i++) trend += numeric[i]-numeric[i-1];
+    trend /= numeric.length || 1;
+
+    let predicted = avg + trend;
+    predicted = Math.max(0, Math.min(100, predicted));
+
+    resultBox.innerHTML = `
+        <b>Ожидаемая оценка:</b> 
+        <span style="color:green; font-size:22px;">
+            ${predicted.toFixed(1)} / 100
+        </span>
+    `;
+
+    drawChart(grades);
+}
+
+
+/* ==========================================================
+   4. ГРАФИК
+========================================================== */
+let chart = null;
+
+function drawChart(data) {
+    const ctx = document.getElementById("studentChart").getContext("2d");
+
+    if (chart) chart.destroy();
+
+    chart = new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: data.map(d => d.course_title),
+            datasets: [{
+                label: "Оценки",
+                data: data.map(d => d.final_grade),
+                borderColor: "#4caf50",
+                borderWidth: 2
+            }]
+        }
+    });
+}
 
 </script>
 </body>
