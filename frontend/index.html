@@ -109,6 +109,10 @@ button.action-btn{margin-right:5px}
 
     <canvas id="studentChart" width="800" height="400" style="margin-top:30px;"></canvas>
 </div>
+<button id="downloadCsvBtn"
+        style="margin-top:15px; padding:6px 12px; background:#2196f3; color:white;">
+    Скачать CSV
+</button>
 
 
 
@@ -431,7 +435,7 @@ if (table === 'grades') {
 
         <label>
             Итоговая оценка:
-            <input type="number" name="final_grade" step="0.1" required>
+            <input type="number" name="final_grade" min="0" max="100" step="0.1" required>
         </label>
     `;
 
@@ -807,58 +811,60 @@ function clearCanvas(canvas){
   try{ const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); }catch(e){}
 }
 
-// Простая диаграмма на canvas (bar chart)
-function drawBarChart(canvas, labels, values){
-  const ctx = canvas.getContext('2d');
-  // responsive
-  const ratio = window.devicePixelRatio || 1;
-  const rect = canvas.getBoundingClientRect();
-  canvas.width = Math.round(rect.width * ratio);
-  canvas.height = Math.round((rect.height || 260) * ratio);
-  ctx.setTransform(1,0,0,1,0,0); // reset transform
-  ctx.scale(ratio, ratio);
-  ctx.clearRect(0,0,rect.width,rect.height);
 
-  if (!labels || labels.length === 0) {
-    ctx.fillStyle = '#666'; ctx.fillText('Нет данных для графика', 10, 20); return;
-  }
 
-  const padding = 40;
-  const chartW = rect.width - padding*2;
-  const chartH = rect.height - padding*2;
-  const maxVal = Math.max(...values, 1);
-  const n = values.length;
-  const colFull = chartW / n;
-  const barW = colFull * 0.6;
-  const gap = colFull * 0.4;
+// // Простая диаграмма на canvas (bar chart)
+// function drawBarChart(canvas, labels, values){
+//   const ctx = canvas.getContext('2d');
+//   // responsive
+//   const ratio = window.devicePixelRatio || 1;
+//   const rect = canvas.getBoundingClientRect();
+//   canvas.width = Math.round(rect.width * ratio);
+//   canvas.height = Math.round((rect.height || 260) * ratio);
+//   ctx.setTransform(1,0,0,1,0,0); // reset transform
+//   ctx.scale(ratio, ratio);
+//   ctx.clearRect(0,0,rect.width,rect.height);
 
-  // axes
-  ctx.strokeStyle = '#333';
-  ctx.beginPath();
-  ctx.moveTo(padding, padding);
-  ctx.lineTo(padding, padding + chartH);
-  ctx.lineTo(padding + chartW, padding + chartH);
-  ctx.stroke();
+//   if (!labels || labels.length === 0) {
+//     ctx.fillStyle = '#666'; ctx.fillText('Нет данных для графика', 10, 20); return;
+//   }
 
-  ctx.font = '12px Arial';
-  for (let i=0;i<n;i++){
-    const v = values[i];
-    const x = padding + i*(barW+gap) + gap/2;
-    const h = (v / maxVal) * (chartH - 10);
-    const y = padding + chartH - h;
-    ctx.fillStyle = '#4caf50';
-    ctx.fillRect(x, y, barW, h);
-    ctx.fillStyle = '#000';
-    ctx.fillText(String(v), x, y - 6);
-    // label
-    ctx.save();
-    ctx.translate(x + barW/2, padding + chartH + 14);
-    ctx.rotate(-Math.PI/6);
-    ctx.textAlign = 'right';
-    ctx.fillText(labels[i], 0, 0);
-    ctx.restore();
-  }
-}
+//   const padding = 40;
+//   const chartW = rect.width - padding*2;
+//   const chartH = rect.height - padding*2;
+//   const maxVal = Math.max(...values, 1);
+//   const n = values.length;
+//   const colFull = chartW / n;
+//   const barW = colFull * 0.6;
+//   const gap = colFull * 0.4;
+
+//   // axes
+//   ctx.strokeStyle = '#333';
+//   ctx.beginPath();
+//   ctx.moveTo(padding, padding);
+//   ctx.lineTo(padding, padding + chartH);
+//   ctx.lineTo(padding + chartW, padding + chartH);
+//   ctx.stroke();
+
+//   ctx.font = '12px Arial';
+//   for (let i=0;i<n;i++){
+//     const v = values[i];
+//     const x = padding + i*(barW+gap) + gap/2;
+//     const h = (v / maxVal) * (chartH - 10);
+//     const y = padding + chartH - h;
+//     ctx.fillStyle = '#4caf50';
+//     ctx.fillRect(x, y, barW, h);
+//     ctx.fillStyle = '#000';
+//     ctx.fillText(String(v), x, y - 6);
+//     // label
+//     ctx.save();
+//     ctx.translate(x + barW/2, padding + chartH + 14);
+//     ctx.rotate(-Math.PI/6);
+//     ctx.textAlign = 'right';
+//     ctx.fillText(labels[i], 0, 0);
+//     ctx.restore();
+//   }
+// }
 
 
 /* ==========================================================
@@ -917,16 +923,22 @@ async function onStudentSelected() {
     resultBox.innerHTML = "";
     block.classList.add("hidden");
 
-    if (!id) return;
+    if (!id) {
+        drawChart([]); // очистить график
+        return;
+    }
 
-    // данные курсов
+    // 1. Загружаем ВСЕ курсы
     const allCourses = await (await fetch("/api/courses")).json();
 
-    // получаем оценки студента
+    // 2. Загружаем ВСЕ оценки студента
     const grades = await (await fetch(`/api/grades/student/${id}`)).json();
 
-    const learnedIds = new Set(grades.map(g => Number(g.course_id)));
+    // 3. Рисуем график сразу
+    drawChart(grades);
 
+    // 4. Фильтруем курсы без оценок
+    const learnedIds = new Set(grades.map(g => Number(g.course_id)));
     const available = allCourses.filter(c => !learnedIds.has(Number(c.course_id)));
 
     courseSel.innerHTML = `<option value="">-- Выберите предмет --</option>`;
@@ -935,6 +947,9 @@ async function onStudentSelected() {
     });
 
     block.classList.remove("hidden");
+
+    // 5. Сохраняем оценки для CSV
+    window._studentGradesForCSV = grades;
 }
 
 
@@ -942,6 +957,52 @@ async function onStudentSelected() {
    3. ПРОГНОЗ
 ========================================================== */
 
+// document.getElementById("makePredictionBtn").onclick = makePrediction;
+
+// async function makePrediction() {
+//     const studentId = document.getElementById("stat-student-select").value;
+//     const courseId = document.getElementById("stat-course-select").value;
+//     const resultBox = document.getElementById("prediction-result");
+
+//     if (!studentId) {
+//         resultBox.textContent = "Выберите студента.";
+//         return;
+//     }
+//     if (!courseId) {
+//         resultBox.textContent = "Выберите предмет.";
+//         return;
+//     }
+
+//     resultBox.textContent = "Расчёт...";
+
+//     // оценки студента
+//     const grades = await (await fetch(`/api/grades/student/${studentId}`)).json();
+//     const numeric = grades.map(g => Number(g.final_grade)).filter(v => !isNaN(v));
+
+//     if (numeric.length === 0) {
+//         resultBox.textContent = "Недостаточно данных для прогноза.";
+//         return;
+//     }
+
+//     const avg = numeric.reduce((a,b)=>a+b,0) / numeric.length;
+
+//     // простой тренд (разностная)
+//     let trend = 0;
+//     for (let i=1;i<numeric.length;i++) trend += numeric[i]-numeric[i-1];
+//     trend /= numeric.length || 1;
+
+//     let predicted = avg + trend;
+//     predicted = Math.max(0, Math.min(100, predicted));
+
+//     resultBox.innerHTML = `
+//         <b>Ожидаемая оценка:</b> 
+//         <span style="color:green; font-size:22px;">
+//             ${predicted.toFixed(1)} / 100
+//         </span>
+//     `;
+
+//     drawChart(grades);
+// }
 document.getElementById("makePredictionBtn").onclick = makePrediction;
 
 async function makePrediction() {
@@ -960,39 +1021,88 @@ async function makePrediction() {
 
     resultBox.textContent = "Расчёт...";
 
-    // оценки студента
-    const grades = await (await fetch(`/api/grades/student/${studentId}`)).json();
-    const numeric = grades.map(g => Number(g.final_grade)).filter(v => !isNaN(v));
+    try {
+        // --- Оценки студента ---
+        const studentResp = await fetch(`/api/grades/student/${studentId}`);
+        if (!studentResp.ok) throw new Error("Нет ответа от сервера (student)");
 
-    if (numeric.length === 0) {
-        resultBox.textContent = "Недостаточно данных для прогноза.";
-        return;
+        const studentGrades = await studentResp.json();
+        const studentValues = studentGrades
+            .map(g => Number(g.final_grade))
+            .filter(v => !isNaN(v));
+
+        if (studentValues.length === 0) {
+            resultBox.textContent = "У студента нет оценок.";
+            return;
+        }
+
+        // --- Пробуем получить оценки курса ---
+        let courseValues = [];
+        try {
+            const courseResp = await fetch(`/api/grades/course/${courseId}`);
+            if (courseResp.ok) {
+                const courseGrades = await courseResp.json();
+                courseValues = courseGrades
+                    .map(g => Number(g.final_grade))
+                    .filter(v => !isNaN(v));
+            }
+        } catch (e) {
+            console.warn("Маршрут /course не найден — пропускаем");
+        }
+
+        // --- Средние значения ---
+        const studentAvg =
+            studentValues.reduce((a, b) => a + b, 0) / studentValues.length;
+
+        const courseAvg = courseValues.length > 0
+            ? courseValues.reduce((a, b) => a + b, 0) / courseValues.length
+            : 0;
+
+        // --- Тренд ---
+        let trend = 0;
+        for (let i = 1; i < studentValues.length; i++) {
+            trend += studentValues[i] - studentValues[i - 1];
+        }
+        trend /= studentValues.length || 1;
+
+        // --- Прогноз ---
+        let predicted = studentAvg + trend;
+        if (courseAvg > 0) {
+            predicted = (studentAvg * 0.6) + (courseAvg * 0.4) + trend;
+        }
+
+        predicted = Math.max(50, Math.min(100, predicted)); // диапазон 50–100
+
+        // --- Вывод результата ---
+        resultBox.innerHTML = `
+            <div style="font-size:16px">
+                <p><b>Средний балл студента:</b> ${studentAvg.toFixed(1)}</p>
+                <p><b>Средний балл по курсу:</b> ${
+                    courseAvg > 0 ? courseAvg.toFixed(1) : "нет данных"
+                }</p>
+                <p style="margin-top:10px;">
+                    <b>Прогноз:</b>
+                    <span style="color:green; font-size:22px;">
+                        ${predicted.toFixed(1)} / 100
+                    </span>
+                </p>
+            </div>
+        `;
+
+        drawChart(studentGrades);
+
+    } catch (err) {
+        console.error(err);
+        resultBox.textContent = "Ошибка при расчёте прогноза.";
     }
-
-    const avg = numeric.reduce((a,b)=>a+b,0) / numeric.length;
-
-    // простой тренд (разностная)
-    let trend = 0;
-    for (let i=1;i<numeric.length;i++) trend += numeric[i]-numeric[i-1];
-    trend /= numeric.length || 1;
-
-    let predicted = avg + trend;
-    predicted = Math.max(0, Math.min(100, predicted));
-
-    resultBox.innerHTML = `
-        <b>Ожидаемая оценка:</b> 
-        <span style="color:green; font-size:22px;">
-            ${predicted.toFixed(1)} / 100
-        </span>
-    `;
-
-    drawChart(grades);
 }
+
 
 
 /* ==========================================================
    4. ГРАФИК
 ========================================================== */
+
 let chart = null;
 
 function drawChart(data) {
@@ -1000,19 +1110,67 @@ function drawChart(data) {
 
     if (chart) chart.destroy();
 
+    const labels = data.map(d => d.course_title);
+    const values = data.map(d => Number(d.final_grade));
+
     chart = new Chart(ctx, {
-        type: "line",
+        type: "bar", // ← СТОЛБЧАТАЯ диаграмма
         data: {
-            labels: data.map(d => d.course_title),
+            labels: labels,
             datasets: [{
-                label: "Оценки",
-                data: data.map(d => d.final_grade),
-                borderColor: "#4caf50",
-                borderWidth: 2
+                label: "Успеваемость (%)",
+                data: values,
+                backgroundColor: values.map(v =>
+                    v < 60 ? "#f44336" :     // красный
+                    v < 80 ? "#ff9800" :     // оранжевый
+                            "#4caf50"       // зелёный
+                ),
+                borderRadius: 6,
+                borderWidth: 1
             }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    min: 0,
+                    max: 100
+                }
+            }
         }
     });
 }
+
+
+// document.getElementById("downloadPdfBtn").onclick = () => {
+//     const id = document.getElementById("stat-student-select").value;
+
+//     if (!id) {
+//         alert("Выберите студента!");
+//         return;
+//     }
+
+//     const link = document.createElement("a");
+//     link.href = `/api/student/pdf/${id}`;
+//     link.download = `student_${id}_report.pdf`;
+//     document.body.appendChild(link);
+//     link.click();
+//     link.remove();
+// };
+document.getElementById("downloadPdfBtn").onclick = () => {
+    const id = document.getElementById("stat-student-select").value;
+
+    console.log("PDF student ID =", id); // ← важно!
+
+    if (!id || isNaN(Number(id))) {
+        alert("Студент не выбран!");
+        return;
+    }
+
+    window.open(`/api/student/pdf/${id}`, "_blank");
+};
+
+window.open(`/api/student-docx/${studentId}/docx`, "_blank");
 
 </script>
 </body>

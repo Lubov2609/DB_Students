@@ -75,8 +75,6 @@ app.use('/api/students', require('./routes/students'));
 app.use('/api/lecturers', require('./routes/lecturers'));
 app.use('/api/courses', require('./routes/courses'));
 app.use('/api/grades', require('./routes/grades'));
-app.use('/api/semesters', require('./routes/semesters'));
-
 
 // ====================
 // Отдаём фронтенд

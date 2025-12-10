@@ -56,6 +56,22 @@ router.get('/:id', async (req, res) => {
     res.json(r.rows[0]);
 });
 
+// ✅ ВАЖНО: оценки по курсу
+router.get("/course/:id", async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const result = await pool.query(
+            "SELECT final_grade FROM grades WHERE course_id=$32",
+            [id]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json([]);
+    }
+});
+
 // CREATE
 router.post('/', async (req, res) => {
     const { student_id, course_id, semester, final_grade } = req.body;
